@@ -193,4 +193,80 @@ class TLSHandshake {
     }
 }
 
-module.exports = { TLSHandshake, HandshakeError, HandshakeState };
+class SessionManager {
+    constructor(options = {}) {
+        this._sessions = new Map();
+        this.verbose = options.verbose !== undefined ? options.verbose : true;
+        this.rsaBits = options.rsaBits || 2048;
+        this._stats = { total: 0, cached: 0 };
+    }
+
+    getOrCreate(nodeA, nodeB) {
+        const key = `${Math.min(nodeA, nodeB)}-${Math.max(nodeA, nodeB)}`;
+        if (this._sessions.has(key)) {
+            this._stats.cached++;
+            const session = this._sessions.get(key);
+            return {
+                cipherA: nodeA <= nodeB ? session.clientCipher : session.serverCipher,
+                cipherB: nodeA <= nodeB ? session.serverCipher : session.clientCipher,
+            };
+        }
+        this._stats.total++;
+        const hs = new TLSHandshake(nodeA, nodeB, {
+            verbose: this.verbose,
+            rsaBits: this.rsaBits,
+        });
+        const result = hs.perform();
+        this._sessions.set(key, {
+            clientCipher: result.clientCipher,
+            serverCipher: result.serverCipher,
+            sessionKeyHex: result.sessionKeyHex,
+            createdAt: Date.now(),
+            nodeA,
+            nodeB,
+        });
+        return {
+            cipherA: result.clientCipher,
+            cipherB: result.serverCipher,
+        };
+    }
+
+    getCipherFor(senderId, receiverId) {
+        const { cipherA } = this.getOrCreate(senderId, receiverId);
+        return cipherA;
+    }
+
+    hasSession(nodeA, nodeB) {
+        const key = `${Math.min(nodeA, nodeB)}-${Math.max(nodeA, nodeB)}`;
+        return this._sessions.has(key);
+    }
+
+    clearSession(nodeA, nodeB) {
+        const key = `${Math.min(nodeA, nodeB)}-${Math.max(nodeA, nodeB)}`;
+        this._sessions.delete(key);
+    }
+
+    clearAll() { this._sessions.clear(); }
+
+    get sessionCount() { return this._sessions.size; }
+
+    get stats() {
+        return { ...this._stats, active: this._sessions.size };
+    }
+
+    listSessions() {
+        return Array.from(this._sessions.entries()).map(([key, s]) => ({
+            key,
+            nodes: `Node${s.nodeA} ↔ Node${s.nodeB}`,
+            sessionKey: s.sessionKeyHex.slice(0, 16) + '...',
+            age: `${Date.now() - s.createdAt}ms`,
+        }));
+    }
+}
+
+module.exports = {
+    TLSHandshake,
+    HandshakeError,
+    HandshakeState,
+    SessionManager,
+};
