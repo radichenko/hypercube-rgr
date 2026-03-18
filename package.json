@@ -1,0 +1,18 @@
+{
+  "name": "hypercube-network",
+  "version": "1.0.0",
+  "description": "distributed hypercube network simulation with 8 nodes",
+  "main": "src/simulation/index.js",
+  "scripts": {
+    "start": "node src/simulation/index.js"
+  },
+  "keywords": ["hypercube", "network", "simulation", "distributed"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
