@@ -78,6 +78,88 @@ class Hypercube {
     nextHop(currentId, dstId) { return this.router.nextHop(currentId, dstId); }
     getNeighbors(nodeId) { return this.router.getNeighbors(nodeId); }
     isNeighbor(a, b) { return this.router.isNeighbor(a, b); }
+
+    isConnected() {
+        const visited = new Set();
+        const queue = [0];
+        while (queue.length) {
+            const id = queue.shift();
+            if (visited.has(id)) continue;
+            visited.add(id);
+            for (const nId of this.getNeighbors(id)) {
+                if (!visited.has(nId)) queue.push(nId);
+            }
+        }
+        return visited.size === NODES;
+    }
+
+    diameter() {
+        let max = 0;
+        for (let i = 0; i < NODES; i++) {
+            for (let j = i + 1; j < NODES; j++) {
+                max = Math.max(max, this.distance(i, j));
+            }
+        }
+        return max;
+    }
+
+    averageDegree() {
+        const total = Array.from(this.nodes.values())
+            .reduce((sum, n) => sum + n.neighbors.length, 0);
+        return total / NODES;
+    }
+
+    topologyReport() {
+        return {
+            nodes: this.size,
+            edges: this.edgeCount,
+            diameter: this.diameter(),
+            averageDegree: this.averageDegree(),
+            connected: this.isConnected(),
+            dimension: Math.log2(NODES),
+        };
+    }
+
+    printTopology() {
+        console.log(this.router.visualize());
+        console.log('');
+        logger.init('adjacency table (neighbors of each node):');
+        for (const node of this.allNodes()) {
+            const nbStr = node.neighbors
+                .map(id => `Node${id}(${id.toString(2).padStart(3, '0')})`)
+                .join(', ');
+            logger.init(`  ${node.toString().padEnd(12)} → [${nbStr}]`);
+        }
+        console.log('');
+        const report = this.topologyReport();
+        logger.init(
+            `nodes: ${report.nodes} | edges: ${report.edges} | ` +
+            `diameter: ${report.diameter} | degree: ${report.averageDegree} | ` +
+            `connected: ${report.connected}`
+        );
+    }
+
+    printRoutingTable() {
+        logger.section('routing table (all pairs)');
+        const rows = this.router.dumpRoutingTable();
+        console.log(
+            '  ' +
+            'Src'.padEnd(6) +
+            'Dst'.padEnd(6) +
+            'Hops'.padEnd(6) +
+            'Path'
+        );
+        console.log('  ' + '─'.repeat(50));
+        for (const row of rows) {
+            console.log(
+                '  ' +
+                String(row.src).padEnd(6) +
+                String(row.dst).padEnd(6) +
+                String(row.hops).padEnd(6) +
+                row.path
+            );
+        }
+    }
 }
 
 module.exports = { Hypercube, HypercubeNode };
