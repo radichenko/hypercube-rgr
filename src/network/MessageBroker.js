@@ -194,6 +194,81 @@ class MessageBroker {
         return hops;
     }
 
+    async broadcast(srcId, message) {
+        this._assertNodeId(srcId);
+        if (this.verbose) {
+            logger.section(`broadcast from node${srcId}`);
+        }
+
+        const results = [];
+        const targets = Array.from(this._nodes.keys()).filter(id => id !== srcId);
+
+        for (const dstId of targets) {
+            const result = await this.send(srcId, dstId, message);
+            results.push({ dstId, ...result });
+        }
+
+        this._globalStats.totalBroadcasts++;
+
+        if (this.verbose) {
+            logger.success(
+                `broadcast completed node${srcId} → [${targets.join(',')}] ` +
+                `total messages: ${results.length}`
+            );
+        }
+
+        return results;
+    }
+
+    getStats() {
+        const nodeStats = {};
+        for (const [id, node] of this._nodes) {
+            nodeStats[`Node${id}`] = node.stats;
+        }
+
+        const channelStats = {};
+        for (const [key, ch] of this._channels) {
+            channelStats[key] = ch.stats;
+        }
+
+        return {
+            global: { ...this._globalStats, uptimeMs: Date.now() - this._globalStats.startTime },
+            sessions: this._sessionManager.stats,
+            nodes: nodeStats,
+            channels: channelStats,
+        };
+    }
+
+    printStats() {
+        const s = this.getStats();
+        logger.stats({
+            'messages sent':         s.global.totalMessages,
+            'packets sent':          s.global.totalPacketsSent,
+            'packets forwarded':     s.global.totalPacketsForwarded,
+            'total hops':            s.global.totalHops,
+            'broadcasts':            s.global.totalBroadcasts,
+            'tls sessions (new)':    s.sessions.total,
+            'tls sessions (cached)': s.sessions.cached,
+            'active sessions':       s.sessions.active,
+            'uptime':                `${s.global.uptimeMs}ms`,
+        });
+    }
+
+    printInboxes() {
+        logger.section('inbox of all nodes');
+        for (const node of this.allNodes()) {
+            const msgs = node.getMessages();
+            if (msgs.length === 0) {
+                logger.recv(`${node.label}: (empty)`);
+            } else {
+                for (const m of msgs) {
+                    const preview = m.text.length > 50 ? m.text.slice(0, 50) + '...' : m.text;
+                    logger.recv(`${node.label} ← node${m.srcId}: "${preview}"`);
+                }
+            }
+        }
+    }
+
     _assertNodeId(id) {
         if (!Number.isInteger(id) || id < 0 || id > 7) {
             throw new BrokerError(`invalid node id: ${id}. must be 0–7.`);
